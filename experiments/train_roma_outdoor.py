@@ -363,7 +363,7 @@ if __name__ == "__main__":
     parser.add_argument("--wandb_entity", required = False)
     parser.add_argument("--data_root", type=str, default='/data1/Dataset/MegaDepth_v1')
     parser.add_argument("--is_degrade", action='store_true')
-    parser.add_argument("--degrade_params_p", type=str, default='/home/ub24017/MyCodes/ELVIS/data/elvis.json')
+    parser.add_argument("--degrade_params_p", type=str, default='./data/elvis.json')
     parser.add_argument("--load_pretrain", action='store_true')
     parser.add_argument("--contrastive_layers", type=str, default='4,8')
     parser.add_argument("--experiment_name", type=str, default="roma_latest")
