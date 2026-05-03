@@ -1,163 +1,99 @@
-# 
-<p align="center">
-  <h1 align="center"> <ins>RoMa</ins> 🏛️:<br> Robust Dense Feature Matching <br> ⭐CVPR 2024⭐</h1>
-  <p align="center">
-    <a href="https://scholar.google.com/citations?user=Ul-vMR0AAAAJ">Johan Edstedt</a>
-    ·
-    <a href="https://scholar.google.com/citations?user=HS2WuHkAAAAJ">Qiyu Sun</a>
-    ·
-    <a href="https://scholar.google.com/citations?user=FUE3Wd0AAAAJ">Georg Bökman</a>
-    ·
-    <a href="https://scholar.google.com/citations?user=6WRQpCQAAAAJ">Mårten Wadenbäck</a>
-    ·
-    <a href="https://scholar.google.com/citations?user=lkWfR08AAAAJ">Michael Felsberg</a>
-  </p>
-  <h2 align="center"><p>
-    <a href="https://arxiv.org/abs/2305.15404" align="center">Paper</a> | 
-    <a href="https://parskatt.github.io/RoMa" align="center">Project Page</a>
-  </p></h2>
-  <div align="center"></div>
-</p>
-<br/>
-<p align="center">
-    <img src="https://github.com/Parskatt/RoMa/assets/22053118/15d8fea7-aa6d-479f-8a93-350d950d006b" alt="example" width=80%>
-    <br>
-    <em>RoMa is the robust dense feature matcher capable of estimating pixel-dense warps and reliable certainties for almost any image pair.</em>
-</p>
+# Low-Light Robust Finetuning of RoMa
 
-## Setup/Install
-In your python environment (tested on Linux python 3.12), run:
+This work presents a fine-tuned version of [RoMa](https://github.com/Parskatt/RoMa) designed for robust image matching under low-light conditions. The model is enhanced with degradation-aware training and advanced loss functions to improve robustness in challenging lighting scenarios.
+
+## Overview
+
+This project extends the original RoMa architecture by incorporating:
+- **Degradation Simulation**: Low-light image degradation statistics computed via VDP-Net from [ELVIS](https://github.com/JoanneLin168/ELVIS/tree/main)
+- **Robust Training**: Fine-tuning on [MegaDepth](https://www.cs.cornell.edu/projects/megadepth/) dataset with degradation augmentation
+- **Advanced Loss Functions**: InfoNCE and VICReg losses for improved matching robustness
+
+## Setup
+
+Environment setup and data processing follow the same procedures as the original [RoMa project](https://github.com/Parskatt/RoMa).
+
+The degradation statistics for low-light video frames are precomputed and available in `./data/elvis.json`.
+
+## Model Training
+
+To train the model with degradation augmentation and pretrained weights:
+
 ```bash
-uv pip install -e .
-```
-or 
-```bash
-uv sync
-```
-You can also install `romatch` directly as a package from PyPI by
-```bash
-uv pip install romatch
-```
-or 
-```bash
-uv add romatch
+python experiments/train_roma_outdoor.py \
+    --is_degrade \
+    --load_pretrain
 ```
 
-## Fused local correlation kernel
-Include the `--extra fused-local-corr` flag as:
+**Parameters:**
+- `--is_degrade`: Enable image degradation augmentation
+- `--load_pretrain`: Load pretrained RoMa weights
+
+**Finetuned model download:**
+
+(model weights to be added upon publication)
+
+## Model Evaluation
+
+To evaluate the fine-tuned model:
+
 ```bash
-uv sync --extra fused-local-corr
-```
-or 
-```bash
-uv pip install romatch[fused-local-corr]
-```
-or
-```bash
-uv add romatch[fused-local-corr]
+python experiments/eval_roma_outdoor.py \
+    --load_weight_path <path_to_your_weight>
 ```
 
+Replace `<path_to_your_weight>` with the path to your trained model weights.
 
+## Key Modifications
 
-## Demo / How to Use
-We provide two demos in the [demos folder](demo).
-Here's the gist of it:
+### 1. Data Degradation (`./romatch/datasets/megadepth.py`)
+
+The degradation process simulates low-light conditions by adding realistic noise patterns to training images:
+
 ```python
-from romatch import roma_outdoor
-roma_model = roma_outdoor(device=device)
-# Match
-warp, certainty = roma_model.match(imA_path, imB_path, device=device)
-# Sample matches for estimation
-matches, certainty = roma_model.sample(warp, certainty)
-# Convert to pixel coordinates (RoMa produces matches in [-1,1]x[-1,1])
-kptsA, kptsB = roma_model.to_pixel_coordinates(matches, H_A, W_A, H_B, W_B)
-# Find a fundamental matrix (or anything else of interest)
-F, mask = cv2.findFundamentalMat(
-    kptsA.cpu().numpy(), kptsB.cpu().numpy(), ransacReprojThreshold=0.2, method=cv2.USAC_MAGSAC, confidence=0.999999, maxIters=10000
-)
+# Degrade image with two different noise modes
+if self.is_degrade:
+    im_A1, mode1 = degradation.generate_noise_for_train(
+        im_A, 
+        self.degrade_params, 
+        device=im_A.device, 
+        use_normal=False
+    )
+    im_A2, mode2 = degradation.generate_noise_for_train(
+        im_A, 
+        self.degrade_params, 
+        device=im_A.device, 
+        use_normal=True
+    )
 ```
 
-**New**: You can also match arbitrary keypoints with RoMa. See [match_keypoints](romatch/models/matcher.py) in RegressionMatcher.
+### 2. Predictor Module (`./romatch/models/encoders.py`)
 
-## Settings
+An additional predictor module has been integrated into the model architecture and is utilized in the `forward()` method of `RegressionMatcher` (`./romatch/models/matchers.py`).
 
-### Resolution
-By default RoMa uses an initial resolution of (560,560) which is then upsampled to (864,864). 
-You can change this at construction (see roma_outdoor kwargs).
-You can also change this later, by changing the roma_model.w_resized, roma_model.h_resized, and roma_model.upsample_res.
+### 3. Loss Functions (`./romatch/losses/robust_loss.py`)
 
-### Sampling
-roma_model.sample_thresh controls the thresholding used when sampling matches for estimation. In certain cases a lower or higher threshold may improve results.
+Two advanced contrastive loss functions have been implemented:
+- **InfoNCE Loss**: Contrastive learning approach for improved feature discrimination
+- **VICReg Loss**: Variance-Invariance-Covariance regularization for stable training
 
+## Citation
 
-## Reproducing Results
-The experiments in the paper are provided in the [experiments folder](experiments).
+If you find this work useful in your research, please consider citing:
 
-### Training
-1. First follow the instructions provided here: https://github.com/Parskatt/DKM for downloading and preprocessing datasets.
-2. Run the relevant experiment, e.g.,
-```bash
-torchrun --nproc_per_node=4 --nnodes=1 --rdzv_backend=c10d experiments/roma_outdoor.py
-```
-### Testing
-```bash
-python experiments/roma_outdoor.py --only_test --benchmark mega-1500
-```
-## License
-All our code except DINOv2 is MIT license.
-DINOv2 has an Apache 2 license [DINOv2](https://github.com/facebookresearch/dinov2/blob/main/LICENSE).
-
-## Acknowledgement
-Our codebase builds on the code in [DKM](https://github.com/Parskatt/DKM).
-
-## Tiny RoMa
-If you find that RoMa is too heavy, you might want to try Tiny RoMa which is built on top of XFeat.
-```python
-from romatch import tiny_roma_v1_outdoor
-tiny_roma_model = tiny_roma_v1_outdoor(device=device)
-```
-Mega1500:
-|  | AUC@5 | AUC@10 | AUC@20 |
-|----------|----------|----------|----------|
-| XFeat    | 46.4    | 58.9    | 69.2    |
-| XFeat*    |  51.9   | 67.2    | 78.9    |
-| Tiny RoMa v1    | 56.4 | 69.5 | 79.5     |
-| RoMa    |  -   | -    | -    |
-
-Mega-8-Scenes (See DKM):
-|  | AUC@5 | AUC@10 | AUC@20 |
-|----------|----------|----------|----------|
-| XFeat    | -    | -    | -    |
-| XFeat*    |  50.1   | 64.4    | 75.2    |
-| Tiny RoMa v1    | 57.7 | 70.5 | 79.6     |
-| RoMa    |  -   | -    | -    |
-
-IMC22 :'):
-|  | mAA@10 |
-|----------|----------|
-| XFeat    | 42.1    |
-| XFeat*    |  -   |
-| Tiny RoMa v1    | 42.2 |
-| RoMa    |  -   |
-
-## Reproducibility
-There are a few diffs in the current codebase compared to the original repo used to run experiments.
-
-1. The `scale_factor` used in the `match` method now is relative to the original training resolution of `560`. Previosly it was based on the set coarse resolution (which might or might not be `560`).
-2. Newer PyTorch, original code used something like `2.1`.
-3. Stochastic eval: both RANSAC and the chosen correspondences can affect results in `Mega1500`.
-4. Matrix inverse in GP has been replaced with cholesky decomp.
-
-That being said, if diff of results are $>0.5$ there probably is something wrong, please let me know.
-
-
-## BibTeX
-If you find our models useful, please consider citing our paper!
-```
-@inproceedings{edstedt2024roma,
-title={{RoMa: Robust Dense Feature Matching}},
-author={Edstedt, Johan and Sun, Qiyu and Bökman, Georg and Wadenbäck, Mårten and Felsberg, Michael},
-booktitle={IEEE Conference on Computer Vision and Pattern Recognition},
-year={2024}
+```bibtex
+@article{,
+  author = {},
+  title = {},
+  year = {2026}
 }
 ```
+
+(Citation details to be added upon publication)
+
+## References
+
+- [RoMa: Robust Matching](https://github.com/Parskatt/RoMa)
+- [ELVIS: Event-based Low-light Video Enhancement](https://github.com/JoanneLin168/ELVIS/tree/main)
+- [MegaDepth Dataset](https://www.cs.cornell.edu/projects/megadepth/)
+- [DKM: Dense Correspondence](https://github.com/Parskatt/DKM)
