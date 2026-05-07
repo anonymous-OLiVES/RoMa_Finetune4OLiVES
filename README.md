@@ -94,6 +94,6 @@ If you find this work useful in your research, please consider citing:
 ## References
 
 - [RoMa: Robust Matching](https://github.com/Parskatt/RoMa)
-- [ELVIS: Event-based Low-light Video Enhancement](https://github.com/JoanneLin168/ELVIS/tree/main)
+- [ELVIS: Enhance Low-Light for Video Instance Segmentation](https://github.com/JoanneLin168/ELVIS/tree/main)
 - [MegaDepth Dataset](https://www.cs.cornell.edu/projects/megadepth/)
 - [DKM: Dense Correspondence](https://github.com/Parskatt/DKM)
